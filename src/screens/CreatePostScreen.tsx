@@ -1,214 +1,329 @@
 import React, {useMemo, useState} from 'react';
 import {
-  Alert,
+  Image,
+  PermissionsAndroid,
+  Platform,
   ScrollView,
   StyleSheet,
-  Switch,
-  Text,
-  TextInput,
   View
 } from 'react-native';
-import Screen from '@app/components/common/Screen';
-import {palette, spacing, typography} from '@app/theme';
-import {useAppDispatch, useAppSelector} from '@app/store/redux/hooks';
 import {
-  createCommunityPost,
-  updatePostHighlights
-} from '@app/store/redux/slices/contentSlice';
+  Appbar,
+  Button,
+  Chip,
+  HelperText,
+  IconButton,
+  Snackbar,
+  Text,
+  TextInput
+} from 'react-native-paper';
+import {useNavigation} from '@react-navigation/native';
+import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
+import {
+  launchImageLibrary,
+  type Asset,
+  type ImageLibraryOptions
+} from 'react-native-image-picker';
+import Screen from '@app/components/common/Screen';
+import {palette, spacing} from '@app/theme';
+import {
+  COMMUNITY_TAGS,
+  type CommunityMedia,
+  type CommunityTag
+} from '@app/types';
+import {communityApi} from '@app/services/api/communityApi';
+import {useCommunityStore} from '@app/store/zustand/communityStore';
+import type {RootStackParamList} from '@app/navigation/types';
+
+type Navigation = NativeStackNavigationProp<RootStackParamList>;
+
+const availableTags = COMMUNITY_TAGS.filter(tag => tag.value !== 'all');
 
 const CreatePostScreen = (): JSX.Element => {
-  const dispatch = useAppDispatch();
-  const accounts = useAppSelector(state => state.auth.accounts);
-  const activeUserId = useAppSelector(state => state.auth.activeUserId);
-  const activeUser = useMemo(
-    () => accounts.find(account => account.id === activeUserId),
-    [accounts, activeUserId]
-  );
+  const navigation = useNavigation<Navigation>();
+  const addPostToTop = useCommunityStore(state => state.addPostToTop);
+  const setFilterTag = useCommunityStore(state => state.setFilterTag);
 
   const [content, setContent] = useState('');
-  const [tags, setTags] = useState('');
-  const [pinPost, setPinPost] = useState(false);
-  const [featurePost, setFeaturePost] = useState(false);
+  const [selectedTags, setSelectedTags] = useState<CommunityTag[]>(['daily']);
+  const [mediaItems, setMediaItems] = useState<CommunityMedia[]>([]);
+  const [isSubmitting, setSubmitting] = useState(false);
+  const [snackbarMessage, setSnackbarMessage] = useState<string | null>(null);
+  const [contentError, setContentError] = useState('');
 
-  const handleSubmit = () => {
-    if (!activeUser) {
-      Alert.alert('提示', '请先登录账号。');
+  const canSubmit = useMemo(
+    () => content.trim().length >= 5 && selectedTags.length > 0,
+    [content, selectedTags]
+  );
+
+  const toggleTag = (tag: CommunityTag) => {
+    setSelectedTags(prev => {
+      if (prev.includes(tag)) {
+        if (prev.length === 1) {
+          return prev;
+        }
+        return prev.filter(item => item !== tag);
+      }
+      return [...prev, tag];
+    });
+  };
+
+  const requestGalleryPermission = async (): Promise<boolean> => {
+    if (Platform.OS !== 'android') {
+      return true;
+    }
+    const readImagesPermission =
+      PermissionsAndroid.PERMISSIONS.READ_MEDIA_IMAGES ??
+      PermissionsAndroid.PERMISSIONS.READ_EXTERNAL_STORAGE;
+    const granted = await PermissionsAndroid.request(readImagesPermission);
+    return granted === PermissionsAndroid.RESULTS.GRANTED;
+  };
+
+  const handlePickMedia = async () => {
+    const hasPermission = await requestGalleryPermission();
+    if (!hasPermission) {
+      setSnackbarMessage('需要相册权限才能上传图片或视频');
       return;
     }
-
-    const trimmed = content.trim();
-    if (trimmed.length === 0) {
-      Alert.alert('提示', '请输入动态内容。');
-      return;
-    }
-
-    const parsedTags = tags
-      .split(',')
-      .map(item => item.trim())
-      .filter(Boolean);
-
-    const action = dispatch(
-      createCommunityPost({
-        authorId: activeUser.id,
-        authorName: activeUser.name,
-        authorRole: activeUser.role,
-        content: trimmed,
-        tags: parsedTags
-      })
-    );
-
-    if (activeUser.role === 'senior') {
-      dispatch(
-        updatePostHighlights({
-          postId: action.payload.id,
-          isPinned: pinPost,
-          isFeatured: featurePost
+    const options: ImageLibraryOptions = {
+      mediaType: 'mixed',
+      selectionLimit: 0,
+      includeExtra: false
+    };
+    launchImageLibrary(options, response => {
+      if (response.didCancel || !response.assets) {
+        return;
+      }
+      const mapped = response.assets
+        .map((asset: Asset) => {
+          if (!asset.uri) {
+            return null;
+          }
+          const isVideo = asset.type?.startsWith('video');
+          return {
+            id: asset.assetId ?? asset.fileName ?? `${asset.uri}-${Date.now()}`,
+            type: isVideo ? 'video' : 'image',
+            uri: asset.uri,
+            thumbnail: isVideo ? asset.uri : undefined
+          } as CommunityMedia;
         })
-      );
-    }
+        .filter((item): item is CommunityMedia => Boolean(item));
+      setMediaItems(prev => [...prev, ...mapped]);
+    });
+  };
 
-    setContent('');
-    setTags('');
-    setPinPost(false);
-    setFeaturePost(false);
-    Alert.alert('发布成功', '动态已提交到宠物圈子。');
+  const handleRemoveMedia = (id: string) => {
+    setMediaItems(prev => prev.filter(item => item.id !== id));
+  };
+
+  const handleSubmit = async () => {
+    if (!canSubmit) {
+      setContentError('请至少输入 5 个字，并选择标签');
+      return;
+    }
+    setSubmitting(true);
+    setContentError('');
+    try {
+      const newPost = await communityApi.createPost({
+        content: content.trim(),
+        tags: selectedTags,
+        media: mediaItems
+      });
+      addPostToTop(newPost);
+      setFilterTag('all');
+      setSnackbarMessage('发布成功，已推送到社区');
+      setContent('');
+      setMediaItems([]);
+      navigation.goBack();
+    } catch (error) {
+      console.warn('Create post failed', error);
+      setSnackbarMessage('发布失败，请稍后再试');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
-    <Screen padded={true}>
-      <ScrollView contentContainerStyle={styles.content}>
-        <Text style={styles.title}>发布社区动态</Text>
-        <Text style={styles.subtitle}>
-          分享宠物日常、经验或救助故事，增强社区互动。
-        </Text>
-
-        <Text style={styles.label}>动态内容</Text>
+    <Screen padded={false}>
+      <Appbar.Header>
+        <Appbar.BackAction onPress={() => navigation.goBack()} />
+        <Appbar.Content title="发布动态" />
+        <Appbar.Action
+          icon="check"
+          disabled={!canSubmit || isSubmitting}
+          onPress={handleSubmit}
+        />
+      </Appbar.Header>
+      <ScrollView
+        style={styles.scroll}
+        contentContainerStyle={styles.contentContainer}>
+        <Text style={styles.sectionLabel}>正文</Text>
         <TextInput
-          style={styles.textarea}
           value={content}
           onChangeText={setContent}
-          placeholder="记录你的宠物故事..."
-          placeholderTextColor={palette.textSecondary}
           multiline
-          numberOfLines={6}
-          textAlignVertical="top"
+          mode="outlined"
+          placeholder="分享宠物日常、训练心得或救助信息..."
+          style={styles.textInput}
         />
-
-        <Text style={styles.label}>话题标签（使用逗号分隔）</Text>
-        <TextInput
-          style={styles.input}
-          value={tags}
-          onChangeText={setTags}
-          placeholder="萌宠, 初次训练, 救助故事"
-          placeholderTextColor={palette.textSecondary}
-        />
-
-        {activeUser?.role === 'senior' && (
-          <View style={styles.privilegedSection}>
-            <Text style={styles.sectionTitle}>资深用户工具</Text>
-
-            <View style={styles.toggleRow}>
-              <Text style={styles.toggleLabel}>置顶此帖子</Text>
-              <Switch
-                value={pinPost}
-                onValueChange={setPinPost}
-                trackColor={{true: palette.primary}}
-              />
-            </View>
-
-            <View style={styles.toggleRow}>
-              <Text style={styles.toggleLabel}>加精推荐</Text>
-              <Switch
-                value={featurePost}
-                onValueChange={setFeaturePost}
-                trackColor={{true: palette.secondary}}
-              />
-            </View>
-          </View>
+        {contentError.length > 0 && (
+          <HelperText type="error" visible>
+            {contentError}
+          </HelperText>
         )}
 
-        <View style={styles.submitButtonContainer}>
-          <Text style={styles.submitButton} onPress={handleSubmit}>
-            发布动态
-          </Text>
+        <View style={styles.sectionHeader}>
+          <Text style={styles.sectionLabel}>标签</Text>
+          <Text style={styles.sectionHint}>选择至少 1 个标签帮助分类</Text>
         </View>
+        <View style={styles.tagsRow}>
+          {availableTags.map(tag => (
+            <Chip
+              key={tag.value}
+              selected={selectedTags.includes(tag.value)}
+              style={[
+                styles.tagChip,
+                selectedTags.includes(tag.value) && styles.tagChipSelected
+              ]}
+              onPress={() => toggleTag(tag.value)}>
+              {tag.label}
+            </Chip>
+          ))}
+        </View>
+
+        <View style={styles.sectionHeader}>
+          <Text style={styles.sectionLabel}>图片/视频</Text>
+          <Button
+            icon="image-plus"
+            mode="outlined"
+            onPress={handlePickMedia}
+            disabled={isSubmitting}>
+            选择文件
+          </Button>
+        </View>
+        <View style={styles.mediaGrid}>
+          {mediaItems.map(item => (
+            <View style={styles.mediaItem} key={item.id}>
+              <Image source={{uri: item.uri}} style={styles.mediaImage} />
+              {item.type === 'video' && (
+                <View style={styles.videoLabel}>
+                  <Text style={styles.videoLabelText}>VIDEO</Text>
+                </View>
+              )}
+              <IconButton
+                icon="close"
+                size={18}
+                style={styles.mediaRemove}
+                onPress={() => handleRemoveMedia(item.id)}
+              />
+            </View>
+          ))}
+          {mediaItems.length === 0 && (
+            <Text style={styles.mediaEmpty}>暂未选择媒体</Text>
+          )}
+        </View>
+
+        <Button
+          mode="contained"
+          style={styles.submitButton}
+          onPress={handleSubmit}
+          loading={isSubmitting}
+          disabled={!canSubmit || isSubmitting}>
+          发布
+        </Button>
       </ScrollView>
+      <Snackbar
+        visible={Boolean(snackbarMessage)}
+        onDismiss={() => setSnackbarMessage(null)}
+        duration={3000}>
+        {snackbarMessage}
+      </Snackbar>
     </Screen>
   );
 };
 
 const styles = StyleSheet.create({
-  content: {
-    paddingBottom: spacing.xl
+  scroll: {
+    flex: 1,
+    backgroundColor: '#fff'
   },
-  title: {
-    fontSize: typography.heading,
-    fontWeight: '700',
-    color: palette.textPrimary
+  contentContainer: {
+    padding: spacing.lg
   },
-  subtitle: {
-    color: palette.textSecondary,
-    marginTop: spacing.xs,
-    marginBottom: spacing.lg
-  },
-  label: {
-    fontSize: typography.caption,
-    color: palette.textSecondary,
-    marginBottom: spacing.xs
-  },
-  textarea: {
-    borderWidth: 1,
-    borderColor: palette.border,
-    borderRadius: 12,
-    padding: spacing.md,
-    fontSize: typography.body,
-    color: palette.textPrimary,
-    marginBottom: spacing.lg,
-    minHeight: 160
-  },
-  input: {
-    borderWidth: 1,
-    borderColor: palette.border,
-    borderRadius: 12,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm,
-    fontSize: typography.body,
-    color: palette.textPrimary,
-    marginBottom: spacing.lg
-  },
-  privilegedSection: {
-    borderWidth: 1,
-    borderColor: palette.secondary,
-    borderRadius: 12,
-    padding: spacing.md,
-    marginBottom: spacing.lg,
-    backgroundColor: '#E0F2F1'
-  },
-  sectionTitle: {
-    fontWeight: '600',
-    color: palette.secondary,
-    marginBottom: spacing.sm
-  },
-  toggleRow: {
+  sectionHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+    marginTop: spacing.lg,
     marginBottom: spacing.sm
   },
-  toggleLabel: {
+  sectionLabel: {
+    fontSize: 16,
+    fontWeight: '700',
     color: palette.textPrimary,
-    fontSize: typography.body
+    marginBottom: spacing.xs
   },
-  submitButtonContainer: {
-    alignItems: 'center'
+  sectionHint: {
+    color: palette.textSecondary,
+    fontSize: 12
+  },
+  textInput: {
+    minHeight: 160,
+    textAlignVertical: 'top'
+  },
+  tagsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap'
+  },
+  tagChip: {
+    marginRight: spacing.sm,
+    marginBottom: spacing.sm
+  },
+  tagChipSelected: {
+    backgroundColor: palette.primary
+  },
+  mediaGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    marginTop: spacing.sm
+  },
+  mediaItem: {
+    width: '30%',
+    aspectRatio: 1,
+    marginRight: spacing.sm,
+    marginBottom: spacing.sm,
+    borderRadius: 12,
+    overflow: 'hidden'
+  },
+  mediaImage: {
+    width: '100%',
+    height: '100%'
+  },
+  mediaRemove: {
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    backgroundColor: '#00000060'
+  },
+  mediaEmpty: {
+    color: palette.textSecondary
+  },
+  videoLabel: {
+    position: 'absolute',
+    bottom: spacing.xs,
+    left: spacing.xs,
+    backgroundColor: '#00000070',
+    paddingHorizontal: spacing.xs,
+    borderRadius: 8
+  },
+  videoLabelText: {
+    color: '#fff',
+    fontSize: 10,
+    fontWeight: '600'
   },
   submitButton: {
-    backgroundColor: palette.primary,
-    color: '#fff',
-    paddingVertical: spacing.sm,
-    paddingHorizontal: spacing.lg,
-    borderRadius: 24,
-    fontWeight: '600'
+    marginTop: spacing.xl,
+    borderRadius: 999
   }
 });
 

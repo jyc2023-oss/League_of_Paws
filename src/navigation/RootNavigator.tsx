@@ -4,7 +4,7 @@ import {createBottomTabNavigator} from '@react-navigation/bottom-tabs';
 import type {MainTabParamList, RootStackParamList} from './types';
 import HomeScreen from '@app/screens/HomeScreen';
 import PetsScreen from '@app/screens/PetsScreen';
-import CommunityScreen from '@app/screens/CommunityScreen';
+import CommunityFeedScreen from '@app/screens/CommunityFeedScreen';
 import ProfileScreen from '@app/screens/ProfileScreen';
 import RescueDetailsScreen from '@app/screens/RescueDetailsScreen';
 import ServiceDetailsScreen from '@app/screens/ServiceDetailsScreen';
@@ -14,6 +14,8 @@ import RegisterScreen from '@app/screens/RegisterScreen';
 import PetOnboardingScreen from '@app/screens/PetOnboardingScreen';
 import HabitCheckInScreen from '@app/screens/HabitCheckInScreen';
 import CreatePostScreen from '@app/screens/CreatePostScreen';
+import QAScreen from '@app/screens/QAScreen';
+import NearbyFriendsScreen from '@app/screens/NearbyFriendsScreen';
 import ServiceFinderScreen from '@app/screens/ServiceFinderScreen';
 import RescueSubmissionScreen from '@app/screens/RescueSubmissionScreen';
 import PetProfileScreen from '@app/screens/PetProfileScreen';
@@ -35,7 +37,7 @@ const MainTabs = (): JSX.Element => (
     }}>
     <Tab.Screen name="Home" component={HomeScreen} />
     <Tab.Screen name="Pets" component={PetsScreen} />
-    <Tab.Screen name="Community" component={CommunityScreen} />
+    <Tab.Screen name="Community" component={CommunityFeedScreen} />
     <Tab.Screen name="Profile" component={ProfileScreen} />
   </Tab.Navigator>
 );
@@ -95,6 +97,16 @@ const RootNavigator = (): JSX.Element => {
             name="CreatePost"
             component={CreatePostScreen}
             options={{title: '发布动态'}}
+          />
+          <Stack.Screen
+            name="CommunityQA"
+            component={QAScreen}
+            options={{title: '社区问答'}}
+          />
+          <Stack.Screen
+            name="NearbyFriends"
+            component={NearbyFriendsScreen}
+            options={{title: '附近宠友'}}
           />
           <Stack.Screen
             name="ServiceFinder"
