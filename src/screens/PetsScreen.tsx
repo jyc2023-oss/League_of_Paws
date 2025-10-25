@@ -1,12 +1,25 @@
 import React from 'react';
 import {FlatList, Pressable, StyleSheet, Text, View} from 'react-native';
+import {useNavigation} from '@react-navigation/native';
+import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import Screen from '@app/components/common/Screen';
 import {usePetStore, PetProfile} from '@app/store/zustand/petStore';
 import {spacing, typography, palette} from '@app/theme';
 import {useAppDispatch, useAppSelector} from '@app/store/redux/hooks';
 import {updateAccountDetails} from '@app/store/redux/slices/userSlice';
+import type {RootStackParamList} from '@app/navigation/types';
+
+type PetHealthRoute = 'PetProfile' | 'HealthReport' | 'FeedingControl' | 'HabitAnalytics';
+
+type PetAction = {
+  label: string;
+  description: string;
+  route: PetHealthRoute;
+  accent: string;
+};
 
 const PetsScreen = (): JSX.Element => {
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const dispatch = useAppDispatch();
   const activeUserId = useAppSelector(state => state.auth.activeUserId);
   const {pets, activePetId, setActivePet, addPet} = usePetStore(state => ({
@@ -16,7 +29,7 @@ const PetsScreen = (): JSX.Element => {
     addPet: state.addPet
   }));
 
-  const handleAddPet = () => {
+  const handleAddPet = (): void => {
     const newPet: PetProfile = {
       id: `pet-${Date.now()}`,
       name: '新成员',
@@ -36,6 +49,40 @@ const PetsScreen = (): JSX.Element => {
     }
   };
 
+  const actions: PetAction[] = [
+    {
+      label: '健康档案',
+      description: '疫苗 · 体检 · 过敏史',
+      route: 'PetProfile',
+      accent: palette.primary
+    },
+    {
+      label: '趋势报告',
+      description: '喂食 / 运动 / 体重',
+      route: 'HealthReport',
+      accent: palette.secondary
+    },
+    {
+      label: '喂食控制',
+      description: '远程提醒与推送',
+      route: 'FeedingControl',
+      accent: palette.accent
+    },
+    {
+      label: '陪伴分析',
+      description: '坚持度 · 洞察',
+      route: 'HabitAnalytics',
+      accent: '#FFB74D'
+    }
+  ];
+
+  const handleNavigate = (route: PetHealthRoute): void => {
+    if (!activePetId) {
+      return;
+    }
+    navigation.navigate(route, {petId: activePetId});
+  };
+
   return (
     <Screen padded={true}>
       <View style={styles.header}>
@@ -49,11 +96,31 @@ const PetsScreen = (): JSX.Element => {
         keyExtractor={item => item.id}
         ListEmptyComponent={
           <Text style={styles.empty}>
-            暂无宠物档案，点击“添加宠物”创建。
+            暂无宠物档案，点击“添加宠物”创建一个吧。
           </Text>
         }
         contentContainerStyle={styles.listContainer}
         ItemSeparatorComponent={() => <View style={styles.separator} />}
+        ListFooterComponent={
+          <View>
+            <Text style={styles.actionTitle}>健康管理工具</Text>
+            <View style={styles.actionsGrid}>
+              {actions.map(action => (
+                <Pressable
+                  key={action.route}
+                  style={[styles.actionCard, {borderColor: action.accent}]}
+                  disabled={!activePetId}
+                  onPress={() => handleNavigate(action.route)}>
+                  <Text style={[styles.actionLabel, {color: action.accent}]}>
+                    {action.label}
+                  </Text>
+                  <Text style={styles.actionDescription}>{action.description}</Text>
+                  {!activePetId && <Text style={styles.actionDisabled}>先选择宠物</Text>}
+                </Pressable>
+              ))}
+            </View>
+          </View>
+        }
         renderItem={({item}) => {
           const isActive = item.id === activePetId;
           return (
@@ -100,7 +167,7 @@ const styles = StyleSheet.create({
     fontWeight: '600'
   },
   listContainer: {
-    paddingBottom: spacing.lg
+    paddingBottom: spacing.xl
   },
   separator: {
     height: spacing.md
@@ -135,6 +202,40 @@ const styles = StyleSheet.create({
     color: palette.textSecondary,
     textAlign: 'center',
     marginTop: spacing.xl
+  },
+  actionTitle: {
+    marginTop: spacing.xl,
+    marginBottom: spacing.sm,
+    fontSize: typography.body,
+    fontWeight: '600',
+    color: palette.textPrimary
+  },
+  actionsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between'
+  },
+  actionCard: {
+    width: '48%',
+    borderWidth: 1,
+    borderRadius: 14,
+    padding: spacing.md,
+    marginBottom: spacing.md,
+    backgroundColor: '#fff'
+  },
+  actionLabel: {
+    fontWeight: '700',
+    fontSize: typography.body
+  },
+  actionDescription: {
+    marginTop: spacing.xs,
+    color: palette.textSecondary,
+    lineHeight: 18
+  },
+  actionDisabled: {
+    marginTop: spacing.sm,
+    fontSize: typography.caption,
+    color: palette.textSecondary
   }
 });
 

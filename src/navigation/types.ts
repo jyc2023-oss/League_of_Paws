@@ -10,6 +10,10 @@ export type RootStackParamList = {
   RescueSubmission: undefined;
   RescueDetails: {rescueId: string} | undefined;
   ServiceDetails: {serviceId: string} | undefined;
+  PetProfile: {petId?: string} | undefined;
+  HealthReport: {petId?: string} | undefined;
+  FeedingControl: {petId?: string} | undefined;
+  HabitAnalytics: {petId?: string} | undefined;
 };
 
 export type MainTabParamList = {

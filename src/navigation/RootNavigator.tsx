@@ -16,6 +16,10 @@ import HabitCheckInScreen from '@app/screens/HabitCheckInScreen';
 import CreatePostScreen from '@app/screens/CreatePostScreen';
 import ServiceFinderScreen from '@app/screens/ServiceFinderScreen';
 import RescueSubmissionScreen from '@app/screens/RescueSubmissionScreen';
+import PetProfileScreen from '@app/screens/PetProfileScreen';
+import HealthReportScreen from '@app/screens/HealthReportScreen';
+import FeedingControlScreen from '@app/screens/FeedingControlScreen';
+import HabitAnalyticsScreen from '@app/screens/HabitAnalyticsScreen';
 import {palette} from '@app/theme';
 import {useAppSelector} from '@app/store/redux/hooks';
 
@@ -111,6 +115,26 @@ const RootNavigator = (): JSX.Element => {
             name="ServiceDetails"
             component={ServiceDetailsScreen}
             options={{title: '服务详情'}}
+          />
+          <Stack.Screen
+            name="PetProfile"
+            component={PetProfileScreen}
+            options={{title: '宠物健康档案'}}
+          />
+          <Stack.Screen
+            name="HealthReport"
+            component={HealthReportScreen}
+            options={{title: '健康趋势报告'}}
+          />
+          <Stack.Screen
+            name="FeedingControl"
+            component={FeedingControlScreen}
+            options={{title: '远程喂食提醒'}}
+          />
+          <Stack.Screen
+            name="HabitAnalytics"
+            component={HabitAnalyticsScreen}
+            options={{title: '陪伴与坚持度'}}
           />
         </>
       )}
