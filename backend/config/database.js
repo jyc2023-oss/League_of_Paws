@@ -27,19 +27,39 @@ try {
 async function initializeSchema() {
   const connection = await pool.getConnection();
   try {
+    const ensureColumn = async (table, column, definition) => {
+      const [rows] = await connection.query(
+        `SHOW COLUMNS FROM \`${table}\` LIKE ?`,
+        [column]
+      );
+      if (rows.length === 0) {
+        await connection.query(`ALTER TABLE \`${table}\` ADD COLUMN ${definition}`);
+      }
+    };
+
     // 增加疫苗记录的扩展字段
-    await connection.query(`
-      ALTER TABLE vaccine_records 
-      ADD COLUMN IF NOT EXISTS effect TEXT NULL COMMENT '疫苗作用/防护范围',
-      ADD COLUMN IF NOT EXISTS precautions TEXT NULL COMMENT '接种后的注意事项'
-    `);
+    await ensureColumn(
+      'vaccine_records',
+      'effect',
+      `effect TEXT NULL COMMENT '疫苗作用/防护范围'`
+    );
+    await ensureColumn(
+      'vaccine_records',
+      'precautions',
+      `precautions TEXT NULL COMMENT '接种后的注意事项'`
+    );
 
     // 增加体检报告扩展字段
-    await connection.query(`
-      ALTER TABLE medical_checkups 
-      ADD COLUMN IF NOT EXISTS details TEXT NULL COMMENT '体检具体项目/内容',
-      ADD COLUMN IF NOT EXISTS report_file_url VARCHAR(500) NULL COMMENT '体检报告PDF链接'
-    `);
+    await ensureColumn(
+      'medical_checkups',
+      'details',
+      `details TEXT NULL COMMENT '体检具体项目/内容'`
+    );
+    await ensureColumn(
+      'medical_checkups',
+      'report_file_url',
+      `report_file_url VARCHAR(500) NULL COMMENT '体检报告PDF链接'`
+    );
 
     // 创建每日习惯打卡表（若不存在）
     await connection.query(`
