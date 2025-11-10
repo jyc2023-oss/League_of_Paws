@@ -18,6 +18,7 @@ import QAScreen from '@app/screens/QAScreen';
 import NearbyFriendsScreen from '@app/screens/NearbyFriendsScreen';
 import ServiceFinderScreen from '@app/screens/ServiceFinderScreen';
 import RescueSubmissionScreen from '@app/screens/RescueSubmissionScreen';
+import PetManageScreen from '@app/screens/PetManageScreen';
 import PetProfileScreen from '@app/screens/PetProfileScreen';
 import HealthReportScreen from '@app/screens/HealthReportScreen';
 import FeedingControlScreen from '@app/screens/FeedingControlScreen';
@@ -89,6 +90,11 @@ const RootNavigator = (): JSX.Element => {
             options={{headerShown: false}}
           />
           <Stack.Screen
+            name="PetOnboarding"
+            component={PetOnboardingScreen}
+            options={{title: '添加宠物'}}
+          />
+          <Stack.Screen
             name="HabitCheckIn"
             component={HabitCheckInScreen}
             options={{title: '每日打卡'}}
@@ -127,6 +133,11 @@ const RootNavigator = (): JSX.Element => {
             name="ServiceDetails"
             component={ServiceDetailsScreen}
             options={{title: '服务详情'}}
+          />
+          <Stack.Screen
+            name="PetManage"
+            component={PetManageScreen}
+            options={{title: '宠物管理'}}
           />
           <Stack.Screen
             name="PetProfile"

@@ -12,6 +12,7 @@ export type RootStackParamList = {
   ServiceDetails: {serviceId: string} | undefined;
   CommunityQA: undefined;
   NearbyFriends: undefined;
+  PetManage: {petId?: string} | undefined;
   PetProfile: {petId?: string} | undefined;
   HealthReport: {petId?: string} | undefined;
   FeedingControl: {petId?: string} | undefined;

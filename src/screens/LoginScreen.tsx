@@ -5,11 +5,12 @@ import {
   View,
   TextInput,
   Pressable,
-  Alert
+  Alert,
+  ActivityIndicator
 } from 'react-native';
 import type {NativeStackScreenProps} from '@react-navigation/native-stack';
 import {useAppDispatch, useAppSelector} from '@app/store/redux/hooks';
-import {loginUser} from '@app/store/redux/slices/userSlice';
+import {loginUserAsync} from '@app/store/redux/slices/userSlice';
 import type {RootStackParamList} from '@app/navigation/types';
 import {palette, spacing, typography} from '@app/theme';
 
@@ -19,13 +20,16 @@ const LoginScreen = ({navigation}: Props): JSX.Element => {
   const dispatch = useAppDispatch();
   const accounts = useAppSelector(state => state.auth.accounts);
   const activeUserId = useAppSelector(state => state.auth.activeUserId);
+  const loginStatus = useAppSelector(state => state.auth.status);
+  const loginError = useAppSelector(state => state.auth.error);
   const activeUser = useMemo(
     () => accounts.find(account => account.id === activeUserId),
     [accounts, activeUserId]
   );
 
   const [email, setEmail] = useState('');
-  const [error, setError] = useState<string | undefined>();
+  const [password, setPassword] = useState('');
+  const [localError, setLocalError] = useState<string | undefined>();
 
   useEffect(() => {
     if (activeUser) {
@@ -39,26 +43,39 @@ const LoginScreen = ({navigation}: Props): JSX.Element => {
     }
   }, [activeUser, navigation]);
 
+  // 显示来自Redux的错误信息
+  useEffect(() => {
+    if (loginError) {
+      setLocalError(loginError);
+    }
+  }, [loginError]);
+
   const handleLogin = () => {
     const trimmedEmail = email.trim();
+    const trimmedPassword = password.trim();
 
+    // 清除之前的错误
+    setLocalError(undefined);
+
+    // 验证输入
     if (trimmedEmail.length === 0) {
-      setError('请输入注册邮箱');
+      setLocalError('请输入邮箱');
       return;
     }
 
-    const existingAccount = accounts.find(
-      account => account.email.toLowerCase() === trimmedEmail.toLowerCase()
-    );
-
-    if (!existingAccount) {
-      setError('未找到对应账号，请先注册');
+    if (trimmedPassword.length === 0) {
+      setLocalError('请输入密码');
       return;
     }
 
-    setError(undefined);
-    dispatch(loginUser({email: trimmedEmail}));
+    // 调用登录API
+    dispatch(loginUserAsync({
+      email: trimmedEmail,
+      password: trimmedPassword
+    }));
   };
+
+  const isLoading = loginStatus === 'loading';
 
   return (
     <View style={styles.container}>
@@ -71,11 +88,31 @@ const LoginScreen = ({navigation}: Props): JSX.Element => {
         autoCapitalize="none"
         placeholder="邮箱"
         placeholderTextColor={palette.textSecondary}
+        editable={!isLoading}
       />
-      {error && <Text style={styles.error}>{error}</Text>}
+      <TextInput
+        style={styles.input}
+        value={password}
+        onChangeText={setPassword}
+        secureTextEntry
+        placeholder="密码"
+        placeholderTextColor={palette.textSecondary}
+        editable={!isLoading}
+      />
+      {(localError || loginError) && (
+        <Text style={styles.error}>{localError || loginError}</Text>
+      )}
 
-      <Pressable style={styles.primaryButton} onPress={handleLogin}>
+      <Pressable 
+        style={[styles.primaryButton, isLoading && styles.primaryButtonDisabled]} 
+        onPress={handleLogin}
+        disabled={isLoading}
+      >
+        {isLoading ? (
+          <ActivityIndicator color="#fff" />
+        ) : (
         <Text style={styles.buttonText}>立即登录</Text>
+        )}
       </Pressable>
 
       <Pressable
@@ -144,6 +181,9 @@ const styles = StyleSheet.create({
   error: {
     color: '#d32f2f',
     marginBottom: spacing.sm
+  },
+  primaryButtonDisabled: {
+    opacity: 0.6
   }
 });
 

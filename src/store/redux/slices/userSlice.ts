@@ -50,6 +50,12 @@ type RegisterData = {
   password: string;
 };
 
+// API 登录时发送的数据
+type LoginData = {
+  email: string;
+  password: string;
+};
+
 // API 成功返回的 User 对象 (来自 MySQL)
 type BackendUser = {
   id: number; // 注意: MySQL ID 是 number
@@ -87,6 +93,7 @@ const initialState: AuthState = {
 // --- 5. (新增) 注册用户的异步 Thunk ---
 // (API 地址 - Android 模拟器请使用 10.0.2.2)
 const API_URL = 'http://10.0.2.2:3000/api/auth/register';
+const LOGIN_API_URL = 'http://10.0.2.2:3000/api/auth/login';
 
 export const registerUser = createAsyncThunk<
   AuthResponse,
@@ -97,6 +104,24 @@ export const registerUser = createAsyncThunk<
   async (userData, thunkAPI) => {
     try {
       const response = await axios.post(API_URL, userData);
+      return response.data; // 返回 { user: {...}, token: "..." }
+    } catch (error: any) {
+      const message = error.response?.data?.message || error.message;
+      return thunkAPI.rejectWithValue(message);
+    }
+  }
+);
+
+// --- 5.1 (新增) 登录用户的异步 Thunk ---
+export const loginUserAsync = createAsyncThunk<
+  AuthResponse,
+  LoginData,
+  { rejectValue: string }
+>(
+  'auth/login', // Action type
+  async (loginData, thunkAPI) => {
+    try {
+      const response = await axios.post(LOGIN_API_URL, loginData);
       return response.data; // 返回 { user: {...}, token: "..." }
     } catch (error: any) {
       const message = error.response?.data?.message || error.message;
@@ -164,9 +189,10 @@ const authSlice = createSlice({
       }
     }
   },
-  // (新增) extraReducers 来处理异步的 registerUser
+  // (新增) extraReducers 来处理异步的 registerUser 和 loginUserAsync
   extraReducers: (builder) => {
     builder
+      // 注册处理
       .addCase(registerUser.pending, (state) => {
         state.status = 'loading';
         state.error = null;
@@ -192,6 +218,41 @@ const authSlice = createSlice({
       .addCase(registerUser.rejected, (state, action) => {
         state.status = 'failed';
         state.error = action.payload; // 存储错误信息 (例如: "该邮箱已注册")
+      })
+      // 登录处理
+      .addCase(loginUserAsync.pending, (state) => {
+        state.status = 'loading';
+        state.error = null;
+      })
+      .addCase(loginUserAsync.fulfilled, (state, action: PayloadAction<AuthResponse>) => {
+        const { user, token } = action.payload;
+        
+        // 检查是否已存在该账号
+        const existingAccountIndex = state.accounts.findIndex(
+          acc => acc.id === user.id.toString()
+        );
+        
+        if (existingAccountIndex === -1) {
+          // 如果不存在，添加到accounts
+          const newAccount: UserAccount = {
+            id: user.id.toString(),
+            name: user.name,
+            email: user.email,
+            role: 'normal',
+            petsCount: 0,
+            hasCompletedProfile: false
+          };
+          state.accounts.push(newAccount);
+        }
+        
+        state.activeUserId = user.id.toString();
+        state.token = token;
+        state.status = 'succeeded';
+        state.error = null;
+      })
+      .addCase(loginUserAsync.rejected, (state, action) => {
+        state.status = 'failed';
+        state.error = action.payload; // 存储错误信息 (例如: "邮箱或密码错误")
       });
   }
 });

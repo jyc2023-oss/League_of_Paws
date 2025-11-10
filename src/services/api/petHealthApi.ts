@@ -10,19 +10,39 @@ import {
   mockHabitAnalytics
 } from '@app/types';
 
+// API基础URL - Android模拟器使用10.0.2.2，iOS/Web使用localhost
+const API_BASE_URL = process.env.PET_HEALTH_BASE_URL ?? 'http://10.0.2.2:3000/api';
+
 const petHealthClient = axios.create({
-  baseURL: process.env.PET_HEALTH_BASE_URL ?? 'http://localhost:4000/api',
+  baseURL: API_BASE_URL,
   timeout: 10000
 });
 
-export const fetchPetHealthProfile = async (petId: string): Promise<PetHealthProfile> => {
-  try {
-    const response = await petHealthClient.get<PetHealthProfile>(`/pets/${petId}/health`);
-    return response.data;
-  } catch (error) {
-    console.warn('[petHealthClient] fallback to mock profile', error);
-    return mockPetHealthProfile;
+/**
+ * 创建带认证的API客户端
+ */
+const createAuthenticatedClient = (token: string) => {
+  return axios.create({
+    baseURL: API_BASE_URL,
+    timeout: 10000,
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json'
+    }
+  });
+};
+
+export const fetchPetHealthProfile = async (
+  petId: string,
+  token?: string
+): Promise<PetHealthProfile> => {
+  if (!token) {
+    throw new Error('需要token才能获取健康档案');
   }
+  
+  const client = createAuthenticatedClient(token);
+  const response = await client.get<PetHealthProfile>(`/pets/${petId}/health`);
+    return response.data;
 };
 
 export const updatePetHealthProfile = async (
