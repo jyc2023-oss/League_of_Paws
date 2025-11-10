@@ -2,6 +2,32 @@
 
 const pool = require('../config/database');
 
+const padZero = (value) => value.toString().padStart(2, '0');
+const formatDateOnly = (dateObj) =>
+  `${dateObj.getFullYear()}-${padZero(dateObj.getMonth() + 1)}-${padZero(dateObj.getDate())}`;
+
+const normalizeDateInput = (value) => {
+  if (!value) {
+    return null;
+  }
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    return value;
+  }
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return null;
+  }
+  return formatDateOnly(parsed);
+};
+
+const parseNumber = (value) => {
+  if (value === undefined || value === null || value === '') {
+    return null;
+  }
+  const num = Number(value);
+  return Number.isNaN(num) ? null : num;
+};
+
 /**
  * 创建宠物档案
  * POST /api/pets
@@ -110,7 +136,7 @@ async function getPetHealthProfile(req, res) {
 
     // 2. 获取疫苗记录
     const [vaccines] = await pool.query(
-      `SELECT id, name, DATE_FORMAT(date, '%Y-%m-%d') as date, clinic, vet, notes 
+      `SELECT id, name, DATE_FORMAT(date, '%Y-%m-%d') as date, clinic, vet, effect, precautions, notes 
        FROM vaccine_records 
        WHERE pet_id = ? 
        ORDER BY date DESC`,
@@ -119,7 +145,7 @@ async function getPetHealthProfile(req, res) {
 
     // 3. 获取体检报告
     const [checkups] = await pool.query(
-      `SELECT id, DATE_FORMAT(date, '%Y-%m-%d') as date, clinic, vet, summary, weight_kg 
+      `SELECT id, DATE_FORMAT(date, '%Y-%m-%d') as date, clinic, vet, summary, details, report_file_url, weight_kg 
        FROM medical_checkups 
        WHERE pet_id = ? 
        ORDER BY date DESC`,
@@ -188,6 +214,8 @@ async function getPetHealthProfile(req, res) {
         date: v.date,
         clinic: v.clinic || '',
         vet: v.vet || '',
+        effect: v.effect || '',
+        precautions: v.precautions || '',
         notes: v.notes || undefined
       })),
       checkups: checkups.map(c => ({
@@ -196,6 +224,8 @@ async function getPetHealthProfile(req, res) {
         clinic: c.clinic || '',
         vet: c.vet || '',
         summary: c.summary || '',
+        details: c.details || '',
+        reportFileUrl: c.report_file_url || '',
         weightKg: c.weight_kg ? parseFloat(c.weight_kg) : 0
       })),
       allergies: allergies.map(a => ({
@@ -224,6 +254,67 @@ async function getPetHealthProfile(req, res) {
 
   } catch (error) {
     console.error('获取宠物健康档案失败:', error);
+    res.status(500).json({ message: '服务器内部错误，请稍后重试' });
+  }
+}
+
+/**
+ * 获取近七天健康趋势
+ * GET /api/pets/:petId/health/trends
+ */
+async function getHealthTrends(req, res) {
+  try {
+    const userId = req.user.id;
+    const petId = req.params.petId;
+    const petIdInt = parseInt(petId, 10);
+
+    if (Number.isNaN(petIdInt)) {
+      return res.status(400).json({ message: '无效的宠物ID格式' });
+    }
+
+    const [petRows] = await pool.query(
+      'SELECT id FROM pets WHERE id = ? AND user_id = ?',
+      [petIdInt, userId]
+    );
+    if (petRows.length === 0) {
+      return res.status(404).json({ message: '未找到该宠物档案' });
+    }
+
+    const [entries] = await pool.query(
+      `SELECT DATE_FORMAT(entry_date, '%Y-%m-%d') as date, feeding_grams, exercise_minutes, weight_kg
+       FROM habit_entries
+       WHERE pet_id = ?
+       ORDER BY entry_date DESC
+       LIMIT 14`,
+      [petIdInt]
+    );
+
+    const dateMap = new Map();
+    entries.forEach(entry => {
+      dateMap.set(entry.date, entry);
+    });
+
+    const points = [];
+    const today = new Date();
+    for (let i = 6; i >= 0; i -= 1) {
+      const dateObj = new Date(today);
+      dateObj.setDate(today.getDate() - i);
+      const label = formatDateOnly(dateObj);
+      const found = dateMap.get(label);
+      points.push({
+        date: label,
+        feedingGrams: found?.feeding_grams ?? 0,
+        exerciseMinutes: found?.exercise_minutes ?? 0,
+        weightKg: found?.weight_kg ? parseFloat(found.weight_kg) : 0
+      });
+    }
+
+    res.status(200).json({
+      petId: petIdInt.toString(),
+      points
+    });
+  } catch (error) {
+    console.error('获取健康趋势失败:', error);
     res.status(500).json({ message: '服务器内部错误，请稍后重试' });
   }
 }
@@ -304,7 +395,7 @@ async function addVaccine(req, res) {
   try {
     const userId = req.user.id;
     const petId = req.params.petId;
-    const { name, date, clinic, vet, notes } = req.body;
+    const { name, date, clinic, vet, effect, precautions, notes } = req.body;
 
     // 验证宠物是否属于当前用户
     const [petRows] = await pool.query(
@@ -317,9 +408,9 @@ async function addVaccine(req, res) {
     }
 
     const [result] = await pool.query(
-      `INSERT INTO vaccine_records (pet_id, name, date, clinic, vet, notes) 
-       VALUES (?, ?, ?, ?, ?, ?)`,
-      [petId, name, date, clinic || null, vet || null, notes || null]
+      `INSERT INTO vaccine_records (pet_id, name, date, clinic, vet, effect, precautions, notes) 
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      [petId, name, date, clinic || null, vet || null, effect || null, precautions || null, notes || null]
     );
 
     res.status(201).json({
@@ -328,6 +419,8 @@ async function addVaccine(req, res) {
       date,
       clinic: clinic || '',
       vet: vet || '',
+      effect: effect || '',
+      precautions: precautions || '',
       notes: notes || undefined
     });
   } catch (error) {
@@ -344,7 +437,7 @@ async function addCheckup(req, res) {
   try {
     const userId = req.user.id;
     const petId = req.params.petId;
-    const { date, clinic, vet, summary, weightKg } = req.body;
+    const { date, clinic, vet, summary, details, reportFileUrl, weightKg } = req.body;
 
     // 验证宠物是否属于当前用户
     const [petRows] = await pool.query(
@@ -357,9 +450,9 @@ async function addCheckup(req, res) {
     }
 
     const [result] = await pool.query(
-      `INSERT INTO medical_checkups (pet_id, date, clinic, vet, summary, weight_kg) 
-       VALUES (?, ?, ?, ?, ?, ?)`,
-      [petId, date, clinic || null, vet || null, summary || '', weightKg || null]
+      `INSERT INTO medical_checkups (pet_id, date, clinic, vet, summary, details, report_file_url, weight_kg) 
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      [petId, date, clinic || null, vet || null, summary || '', details || null, reportFileUrl || null, weightKg || null]
     );
 
     res.status(201).json({
@@ -368,6 +461,8 @@ async function addCheckup(req, res) {
       clinic: clinic || '',
       vet: vet || '',
       summary: summary || '',
+      details: details || '',
+      reportFileUrl: reportFileUrl || '',
       weightKg: weightKg || 0
     });
   } catch (error) {
@@ -510,15 +605,156 @@ async function addExercise(req, res) {
   }
 }
 
+/**
+ * 记录/更新每日习惯打卡
+ * POST /api/pets/:petId/habits
+ */
+async function recordHabitEntry(req, res) {
+  try {
+    const userId = req.user.id;
+    const petId = req.params.petId;
+    const petIdInt = parseInt(petId, 10);
+    const { date, feedingGrams, exerciseMinutes, weightKg, completedTasks = [], notes } = req.body;
+
+    if (Number.isNaN(petIdInt)) {
+      return res.status(400).json({ message: '无效的宠物ID' });
+    }
+
+    const entryDate = normalizeDateInput(date) || formatDateOnly(new Date());
+    if (!entryDate) {
+      return res.status(400).json({ message: '请提供有效的日期（YYYY-MM-DD）' });
+    }
+
+    const [petRows] = await pool.query(
+      'SELECT id FROM pets WHERE id = ? AND user_id = ?',
+      [petIdInt, userId]
+    );
+
+    if (petRows.length === 0) {
+      return res.status(404).json({ message: '未找到该宠物档案' });
+    }
+
+    const feedingValue = parseNumber(feedingGrams);
+    const exerciseValue = parseNumber(exerciseMinutes);
+    const weightValue = parseNumber(weightKg);
+
+    await pool.query(
+      `INSERT INTO habit_entries (pet_id, entry_date, feeding_grams, exercise_minutes, weight_kg, completed_tasks, notes)
+       VALUES (?, ?, ?, ?, ?, ?, ?)
+       ON DUPLICATE KEY UPDATE
+         feeding_grams = VALUES(feeding_grams),
+         exercise_minutes = VALUES(exercise_minutes),
+         weight_kg = VALUES(weight_kg),
+         completed_tasks = VALUES(completed_tasks),
+         notes = VALUES(notes),
+         updated_at = CURRENT_TIMESTAMP`,
+      [
+        petIdInt,
+        entryDate,
+        feedingValue,
+        exerciseValue,
+        weightValue,
+        JSON.stringify(Array.isArray(completedTasks) ? completedTasks : []),
+        notes || null
+      ]
+    );
+
+    const [rows] = await pool.query(
+      `SELECT id,
+              DATE_FORMAT(entry_date, '%Y-%m-%d') as date,
+              feeding_grams,
+              exercise_minutes,
+              weight_kg,
+              completed_tasks,
+              notes
+       FROM habit_entries
+       WHERE pet_id = ? AND entry_date = ?`,
+      [petIdInt, entryDate]
+    );
+
+    const entry = rows[0];
+    res.status(201).json({
+      id: entry.id.toString(),
+      date: entry.date,
+      feedingGrams: entry.feeding_grams ?? null,
+      exerciseMinutes: entry.exercise_minutes ?? null,
+      weightKg: entry.weight_kg ? parseFloat(entry.weight_kg) : null,
+      notes: entry.notes || '',
+      completedTasks: entry.completed_tasks ? JSON.parse(entry.completed_tasks) : []
+    });
+  } catch (error) {
+    console.error('记录每日习惯失败:', error);
+    res.status(500).json({ message: '服务器内部错误，请稍后重试' });
+  }
+}
+
+/**
+ * 获取近期习惯打卡
+ * GET /api/pets/:petId/habits?limit=5
+ */
+async function getHabitEntries(req, res) {
+  try {
+    const userId = req.user.id;
+    const petId = req.params.petId;
+    const petIdInt = parseInt(petId, 10);
+    const limit = Math.min(parseInt(req.query.limit, 10) || 5, 30);
+
+    if (Number.isNaN(petIdInt)) {
+      return res.status(400).json({ message: '无效的宠物ID' });
+    }
+
+    const [petRows] = await pool.query(
+      'SELECT id FROM pets WHERE id = ? AND user_id = ?',
+      [petIdInt, userId]
+    );
+
+    if (petRows.length === 0) {
+      return res.status(404).json({ message: '未找到该宠物档案' });
+    }
+
+    const [rows] = await pool.query(
+      `SELECT id,
+              DATE_FORMAT(entry_date, '%Y-%m-%d') as date,
+              feeding_grams,
+              exercise_minutes,
+              weight_kg,
+              completed_tasks,
+              notes
+       FROM habit_entries
+       WHERE pet_id = ?
+       ORDER BY entry_date DESC
+       LIMIT ?`,
+      [petIdInt, limit]
+    );
+
+    const history = rows.map(entry => ({
+      id: entry.id.toString(),
+      date: entry.date,
+      feedingGrams: entry.feeding_grams ?? null,
+      exerciseMinutes: entry.exercise_minutes ?? null,
+      weightKg: entry.weight_kg ? parseFloat(entry.weight_kg) : null,
+      notes: entry.notes || '',
+      completedTasks: entry.completed_tasks ? JSON.parse(entry.completed_tasks) : []
+    }));
+
+    res.status(200).json(history);
+  } catch (error) {
+    console.error('获取习惯打卡失败:', error);
+    res.status(500).json({ message: '服务器内部错误，请稍后重试' });
+  }
+}
+
 module.exports = {
   createPet,
   getPetHealthProfile,
+  getHealthTrends,
   getPets,
   updatePet,
   addVaccine,
   addCheckup,
   addAllergy,
   updateFeedingPlan,
-  addExercise
+  addExercise,
+  recordHabitEntry,
+  getHabitEntries
 };
-

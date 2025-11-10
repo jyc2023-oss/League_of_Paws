@@ -25,6 +25,8 @@ CREATE TABLE IF NOT EXISTS vaccine_records (
   date DATE NOT NULL COMMENT '接种日期',
   clinic VARCHAR(200) DEFAULT NULL COMMENT '医院名称',
   vet VARCHAR(100) DEFAULT NULL COMMENT '医生姓名',
+  effect TEXT DEFAULT NULL COMMENT '疫苗作用/防护范围',
+  precautions TEXT DEFAULT NULL COMMENT '接种后的注意事项',
   notes TEXT DEFAULT NULL COMMENT '备注',
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -41,6 +43,8 @@ CREATE TABLE IF NOT EXISTS medical_checkups (
   clinic VARCHAR(200) DEFAULT NULL COMMENT '医院名称',
   vet VARCHAR(100) DEFAULT NULL COMMENT '医生姓名',
   summary TEXT DEFAULT NULL COMMENT '体检总结',
+  details TEXT DEFAULT NULL COMMENT '体检具体项目/内容',
+  report_file_url VARCHAR(500) DEFAULT NULL COMMENT '体检报告PDF链接',
   weight_kg DECIMAL(5,2) DEFAULT NULL COMMENT '体检时体重（公斤）',
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -92,3 +96,19 @@ CREATE TABLE IF NOT EXISTS exercise_records (
   INDEX idx_date (date)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='运动记录表';
 
+-- 7. 每日习惯/健康打卡表（驱动健康趋势）
+CREATE TABLE IF NOT EXISTS habit_entries (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  pet_id INT NOT NULL COMMENT '关联宠物',
+  entry_date DATE NOT NULL COMMENT '打卡日期',
+  feeding_grams INT DEFAULT NULL COMMENT '当日喂食量（克）',
+  exercise_minutes INT DEFAULT NULL COMMENT '运动时长（分钟）',
+  weight_kg DECIMAL(5,2) DEFAULT NULL COMMENT '当日体重（公斤）',
+  completed_tasks JSON DEFAULT NULL COMMENT '完成的任务列表',
+  notes TEXT DEFAULT NULL COMMENT '补充说明',
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uniq_pet_entry_date (pet_id, entry_date),
+  FOREIGN KEY (pet_id) REFERENCES pets(id) ON DELETE CASCADE,
+  INDEX idx_pet_entry_date (pet_id, entry_date)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='每日习惯打卡表';

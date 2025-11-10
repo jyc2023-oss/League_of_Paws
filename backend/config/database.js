@@ -16,10 +16,52 @@ try {
     queueLimit: 0
   });
   console.log('✅ 成功连接到 MySQL 数据库');
+  initializeSchema().catch(err => {
+    console.error('⚠️ 数据库结构升级失败:', err);
+  });
 } catch (error) {
   console.error('❌ 数据库连接失败:', error);
   process.exit(1); // 启动失败时退出
 }
 
-module.exports = pool;
+async function initializeSchema() {
+  const connection = await pool.getConnection();
+  try {
+    // 增加疫苗记录的扩展字段
+    await connection.query(`
+      ALTER TABLE vaccine_records 
+      ADD COLUMN IF NOT EXISTS effect TEXT NULL COMMENT '疫苗作用/防护范围',
+      ADD COLUMN IF NOT EXISTS precautions TEXT NULL COMMENT '接种后的注意事项'
+    `);
 
+    // 增加体检报告扩展字段
+    await connection.query(`
+      ALTER TABLE medical_checkups 
+      ADD COLUMN IF NOT EXISTS details TEXT NULL COMMENT '体检具体项目/内容',
+      ADD COLUMN IF NOT EXISTS report_file_url VARCHAR(500) NULL COMMENT '体检报告PDF链接'
+    `);
+
+    // 创建每日习惯打卡表（若不存在）
+    await connection.query(`
+      CREATE TABLE IF NOT EXISTS habit_entries (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        pet_id INT NOT NULL,
+        entry_date DATE NOT NULL,
+        feeding_grams INT DEFAULT NULL,
+        exercise_minutes INT DEFAULT NULL,
+        weight_kg DECIMAL(5,2) DEFAULT NULL,
+        completed_tasks JSON DEFAULT NULL,
+        notes TEXT DEFAULT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        UNIQUE KEY uniq_pet_entry_date (pet_id, entry_date),
+        FOREIGN KEY (pet_id) REFERENCES pets(id) ON DELETE CASCADE,
+        INDEX idx_pet_entry_date (pet_id, entry_date)
+      )
+    `);
+  } finally {
+    connection.release();
+  }
+}
+
+module.exports = pool;

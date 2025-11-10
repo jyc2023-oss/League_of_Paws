@@ -16,6 +16,7 @@ router.get('/', petController.getPets);
 
 // 获取宠物健康档案
 router.get('/:petId/health', petController.getPetHealthProfile);
+router.get('/:petId/health/trends', petController.getHealthTrends);
 
 // 更新宠物基本信息
 router.put('/:petId', petController.updatePet);
@@ -35,5 +36,8 @@ router.put('/:petId/feeding-plan', petController.updateFeedingPlan);
 // 运动记录
 router.post('/:petId/exercises', petController.addExercise);
 
-module.exports = router;
+// 习惯打卡
+router.get('/:petId/habits', petController.getHabitEntries);
+router.post('/:petId/habits', petController.recordHabitEntry);
 
+module.exports = router;

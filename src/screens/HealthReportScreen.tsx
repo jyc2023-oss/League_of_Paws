@@ -1,6 +1,6 @@
-import React, {useEffect, useMemo, useState} from 'react';
+import React, {useCallback, useMemo, useState} from 'react';
 import {ActivityIndicator, Dimensions, ScrollView, StyleSheet, Text, View} from 'react-native';
-import {RouteProp, useRoute} from '@react-navigation/native';
+import {RouteProp, useFocusEffect, useRoute} from '@react-navigation/native';
 import {LineChart} from 'react-native-chart-kit';
 import Screen from '@app/components/common/Screen';
 import {palette, spacing, typography} from '@app/theme';
@@ -8,6 +8,7 @@ import {HealthTrendReport, mockHealthTrendReport} from '@app/types';
 import {fetchHealthTrendReport} from '@app/services/api/petHealthApi';
 import type {RootStackParamList} from '@app/navigation/types';
 import {usePetStore} from '@app/store/zustand/petStore';
+import {useAppSelector} from '@app/store/redux/hooks';
 
 const chartWidth = Dimensions.get('window').width - spacing.lg * 2;
 
@@ -33,15 +34,25 @@ const HealthReportScreen = (): JSX.Element => {
   const route = useRoute<HealthRoute>();
   const activePetId = usePetStore(state => state.activePetId);
   const petId = route.params?.petId ?? activePetId ?? mockHealthTrendReport.petId;
+  const token = useAppSelector(state => state.auth.token);
 
   const [report, setReport] = useState<HealthTrendReport | undefined>(undefined);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
+  const loadTrends = useCallback(() => {
     let mounted = true;
+    if (!token) {
+      setReport(undefined);
+      setError('请先登录后再查看趋势');
+      setLoading(false);
+      return () => {
+        mounted = false;
+      };
+    }
+
     setLoading(true);
-    fetchHealthTrendReport(petId)
+    fetchHealthTrendReport(petId, token)
       .then(data => {
         if (mounted) {
           setReport(data);
@@ -63,7 +74,9 @@ const HealthReportScreen = (): JSX.Element => {
     return () => {
       mounted = false;
     };
-  }, [petId]);
+  }, [petId, token]);
+
+  useFocusEffect(loadTrends);
 
   const labels = useMemo(() => report?.points.map(point => point.date.slice(5)) ?? [], [report]);
   const feedingData = useMemo(

@@ -103,6 +103,8 @@ export const addVaccine = async (
     date: string;
     clinic?: string;
     vet?: string;
+    effect?: string;
+    precautions?: string;
     notes?: string;
   }
 ): Promise<any> => {
@@ -122,6 +124,8 @@ export const addCheckup = async (
     clinic?: string;
     vet?: string;
     summary?: string;
+    details?: string;
+    reportFileUrl?: string;
     weightKg?: number;
   }
 ): Promise<any> => {
@@ -183,4 +187,3 @@ export const addExercise = async (
   const response = await client.post(`/pets/${petId}/exercises`, exerciseData);
   return response.data;
 };
-
