@@ -1,8 +1,8 @@
 buildscript {
     ext {
-        buildToolsVersion = "35.0.0"       // ✅ 升级 Build Tools
+        buildToolsVersion = "35.0.0"
         minSdkVersion = 23
-        compileSdkVersion = 35             // ✅ 升级到 35
+        compileSdkVersion = 35
         targetSdkVersion = 35
         ndkVersion = "26.1.10909125"
         kotlinVersion = "1.9.22"
@@ -20,9 +20,8 @@ buildscript {
     }
 
     dependencies {
-        // ✅ 指定版本号，否则默认加载旧的 8.2.1
         classpath("com.android.tools.build:gradle:8.6.0")
-        classpath("org.jetbrains.kotlin:kotlin-gradle-plugin:1.9.22")
+        classpath("org.jetbrains.kotlin:kotlin-gradle-plugin:${kotlinVersion}")
         classpath("com.facebook.react:react-native-gradle-plugin")
     }
 }
