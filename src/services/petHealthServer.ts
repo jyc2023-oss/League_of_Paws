@@ -5,6 +5,7 @@ import {
   PetHealthProfile,
   FeedingReminder,
   HabitAnalytics,
+  HabitEntry,
   mockPetHealthProfile,
   mockHealthTrendReport,
   mockFeedingReminders,
@@ -13,6 +14,7 @@ import {
 
 type PetHealthMap = Record<string, PetHealthProfile>;
 type TrendMap = Record<string, HealthTrendReport>;
+type HabitHistoryMap = Record<string, HabitEntry[]>;
 
 const petProfiles: PetHealthMap = {
   [mockPetHealthProfile.id]: {...mockPetHealthProfile}
@@ -26,6 +28,37 @@ let feedingReminders: FeedingReminder[] = [...mockFeedingReminders];
 const habitAnalytics: Record<string, HabitAnalytics> = {
   [mockHabitAnalytics.petId]: {...mockHabitAnalytics}
 };
+const habitHistory: HabitHistoryMap = {
+  [mockHealthTrendReport.petId]: mockHealthTrendReport.points.map((point, index) => ({
+    id: `habit-${index}`,
+    date: point.date,
+    feedingGrams: point.feedingGrams,
+    exerciseMinutes: point.exerciseMinutes,
+    weightKg: point.weightKg,
+    completedTasks: ['feeding', 'walking'],
+    notes: ''
+  }))
+};
+
+const recalcTrend = (petId: string) => {
+  const history = habitHistory[petId];
+  if (!history) {
+    return;
+  }
+  const sorted = [...history].sort((a, b) => a.date.localeCompare(b.date));
+  const recent = sorted.slice(-7);
+  trendReports[petId] = {
+    petId,
+    points: recent.map(entry => ({
+      date: entry.date,
+      feedingGrams: entry.feedingGrams ?? 0,
+      exerciseMinutes: entry.exerciseMinutes ?? 0,
+      weightKg: entry.weightKg ?? 0
+    }))
+  };
+};
+
+recalcTrend(mockHealthTrendReport.petId);
 
 const respondNotFound = (res: Response, message: string): void => {
   res.status(404).json({message});
@@ -73,6 +106,36 @@ export const createPetHealthServer = (): express.Express => {
       return respondNotFound(res, '未找到行为分析数据');
     }
     return res.json(analytics);
+  });
+
+  app.get('/api/pets/:petId/habits', (req: Request, res: Response) => {
+    const history = habitHistory[req.params.petId] ?? [];
+    const limit = Math.min(Number(req.query.limit) || 5, 30);
+    const sorted = [...history].sort((a, b) => b.date.localeCompare(a.date));
+    return res.json(sorted.slice(0, limit));
+  });
+
+  app.post('/api/pets/:petId/habits', (req: Request, res: Response) => {
+    const {date, completedTasks = [], feedingGrams, exerciseMinutes, weightKg, notes} = req.body;
+    const entry: HabitEntry = {
+      id: `habit-${Date.now()}`,
+      date,
+      completedTasks,
+      feedingGrams: typeof feedingGrams === 'number' ? feedingGrams : null,
+      exerciseMinutes: typeof exerciseMinutes === 'number' ? exerciseMinutes : null,
+      weightKg: typeof weightKg === 'number' ? weightKg : null,
+      notes
+    };
+    const history = habitHistory[req.params.petId] ?? [];
+    const dateIndex = history.findIndex(item => item.date === date);
+    if (dateIndex >= 0) {
+      history[dateIndex] = entry;
+    } else {
+      history.push(entry);
+    }
+    habitHistory[req.params.petId] = history;
+    recalcTrend(req.params.petId);
+    return res.status(201).json(entry);
   });
 
   app.get('/api/pets/:petId/feeding-reminders', (req: Request, res: Response) => {

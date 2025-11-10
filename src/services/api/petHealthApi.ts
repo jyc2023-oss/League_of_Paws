@@ -3,6 +3,7 @@ import {
   FeedingReminder,
   HealthTrendReport,
   HabitAnalytics,
+  HabitEntry,
   PetHealthProfile,
   mockFeedingReminders,
   mockHealthTrendReport,
@@ -53,14 +54,13 @@ export const updatePetHealthProfile = async (
   return response.data;
 };
 
-export const fetchHealthTrendReport = async (petId: string): Promise<HealthTrendReport> => {
-  try {
-    const response = await petHealthClient.get<HealthTrendReport>(`/pets/${petId}/health/trends`);
-    return response.data;
-  } catch (error) {
-    console.warn('[petHealthClient] fallback to mock trends', error);
-    return mockHealthTrendReport;
+export const fetchHealthTrendReport = async (petId: string, token?: string): Promise<HealthTrendReport> => {
+  if (!token) {
+    throw new Error('需要token才能获取健康趋势');
   }
+  const client = createAuthenticatedClient(token);
+  const response = await client.get<HealthTrendReport>(`/pets/${petId}/health/trends`);
+  return response.data;
 };
 
 export const fetchFeedingReminders = async (petId: string): Promise<FeedingReminder[]> => {
@@ -106,4 +106,35 @@ export const fetchHabitAnalytics = async (petId: string): Promise<HabitAnalytics
     console.warn('[petHealthClient] fallback to mock habit analytics', error);
     return mockHabitAnalytics;
   }
+};
+
+export type HabitEntryPayload = {
+  date: string;
+  completedTasks: string[];
+  feedingGrams?: number | null;
+  exerciseMinutes?: number | null;
+  weightKg?: number | null;
+  notes?: string;
+};
+
+export const recordHabitEntry = async (
+  petId: string,
+  token: string,
+  payload: HabitEntryPayload
+): Promise<HabitEntry> => {
+  const client = createAuthenticatedClient(token);
+  const response = await client.post<HabitEntry>(`/pets/${petId}/habits`, payload);
+  return response.data;
+};
+
+export const fetchHabitEntries = async (
+  petId: string,
+  token: string,
+  limit = 5
+): Promise<HabitEntry[]> => {
+  const client = createAuthenticatedClient(token);
+  const response = await client.get<HabitEntry[]>(`/pets/${petId}/habits`, {
+    params: {limit}
+  });
+  return response.data;
 };

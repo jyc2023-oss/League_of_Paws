@@ -1,33 +1,68 @@
-import React, {useMemo} from 'react';
+import React, {useCallback, useMemo, useState} from 'react';
 import {Pressable, ScrollView, StyleSheet, Text, View} from 'react-native';
-import {useNavigation} from '@react-navigation/native';
+import {useFocusEffect, useNavigation} from '@react-navigation/native';
 import Screen from '@app/components/common/Screen';
 import {usePetStore} from '@app/store/zustand/petStore';
 import {useAppSelector} from '@app/store/redux/hooks';
 import {spacing, typography, palette} from '@app/theme';
 import type {NativeStackNavigationProp} from '@react-navigation/native-stack';
 import type {RootStackParamList} from '@app/navigation/types';
+import {fetchHabitEntries} from '@app/services/api/petHealthApi';
 
 type Navigation = NativeStackNavigationProp<RootStackParamList>;
 
 const HomeScreen = (): JSX.Element => {
   const navigation = useNavigation<Navigation>();
   const pets = usePetStore(state => state.pets);
-  const activeUserId = useAppSelector(state => state.auth.activeUserId);
-  const habits = useAppSelector(state => state.community.habits);
+  const activePetId = usePetStore(state => state.activePetId);
+  const token = useAppSelector(state => state.auth.token);
+  const petId = activePetId ?? pets[0]?.id;
+
+  const defaultSummary = '今日还未打卡，点击下方按钮开始记录。';
+  const [summaryMessage, setSummaryMessage] = useState(defaultSummary);
+  const [habitLoading, setHabitLoading] = useState(false);
+
+  const refreshHabitSummary = useCallback(() => {
+    if (!token || !petId) {
+      setSummaryMessage('请登录并选择宠物后记录健康打卡。');
+      return;
+    }
+    setHabitLoading(true);
+    fetchHabitEntries(petId, token, 1)
+      .then(entries => {
+        if (entries.length === 0) {
+          setSummaryMessage(defaultSummary);
+          return;
+        }
+        const todayStr = new Date().toISOString().slice(0, 10);
+        if (entries[0].date === todayStr) {
+          setSummaryMessage(
+            `今日已完成 ${entries[0].completedTasks.length} 项任务，继续保持！`
+          );
+        } else {
+          setSummaryMessage('最近已打卡，如需补录可选择对应日期再提交。');
+        }
+      })
+      .catch(() => {
+        setSummaryMessage('无法获取最新打卡记录，请稍后重试。');
+      })
+      .finally(() => {
+        setHabitLoading(false);
+      });
+  }, [defaultSummary, petId, token]);
+
+  useFocusEffect(
+    useCallback(() => {
+      refreshHabitSummary();
+    }, [refreshHabitSummary])
+  );
 
   const todaySummary = useMemo(() => {
-    const today = new Date().toDateString();
-    const record = habits.find(
-      item =>
-        item.userId === activeUserId &&
-        new Date(item.date).toDateString() === today
-    );
-    if (!record) {
-      return '今日还未打卡，点击下方按钮开始记录。';
+    if (habitLoading) {
+      return '正在同步打卡数据...';
     }
-    return `今日已完成 ${record.completedTasks.length} 项任务，继续保持！`;
-  }, [habits, activeUserId]);
+    return summaryMessage;
+  }, [habitLoading, summaryMessage]);
 
   return (
     <Screen padded={true}>

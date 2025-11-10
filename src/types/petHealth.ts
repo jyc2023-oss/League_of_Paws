@@ -4,6 +4,8 @@ export interface VaccineRecord {
   date: string;
   clinic: string;
   vet: string;
+  effect?: string;
+  precautions?: string;
   notes?: string;
 }
 
@@ -13,6 +15,8 @@ export interface MedicalCheckup {
   clinic: string;
   vet: string;
   summary: string;
+  details?: string;
+  reportFileUrl?: string;
   weightKg: number;
 }
 
@@ -81,6 +85,16 @@ export interface HabitAnalytics {
   insights: string[];
 }
 
+export interface HabitEntry {
+  id: string;
+  date: string;
+  feedingGrams: number | null;
+  exerciseMinutes: number | null;
+  weightKg: number | null;
+  completedTasks: string[];
+  notes?: string;
+}
+
 export const mockPetHealthProfile: PetHealthProfile = {
   id: 'pet-001',
   name: '奶茶',
@@ -95,6 +109,8 @@ export const mockPetHealthProfile: PetHealthProfile = {
       date: '2024-09-12',
       clinic: '城市宠物医院',
       vet: '陈医生',
+      effect: '免疫狂犬病毒，保障公共安全',
+      precautions: '接种后48小时内避免洗澡、剧烈运动',
       notes: '加强针，反应轻微'
     },
     {
@@ -112,6 +128,8 @@ export const mockPetHealthProfile: PetHealthProfile = {
       clinic: '城市宠物医院',
       vet: '陈医生',
       summary: '身体状况良好，建议控制体重',
+      details: '血常规、肝肾功能、骨骼检查均正常',
+      reportFileUrl: '',
       weightKg: 11.2
     },
     {
@@ -120,6 +138,8 @@ export const mockPetHealthProfile: PetHealthProfile = {
       clinic: '城市宠物医院',
       vet: '陈医生',
       summary: '牙齿清洁，肠胃正常',
+      details: '腹部B超、血脂、口腔检查',
+      reportFileUrl: '',
       weightKg: 10.8
     }
   ],
